@@ -1,0 +1,53 @@
+t a/ext4.h b/ext4.h
+index 217fbc8..62dda0f 100644
+--- a/ext4.h
++++ b/ext4.h
+@@ -644,6 +644,8 @@ enum {
+  * Structure of an inode on the disk
+  */
+ struct ext42_inode {
++       int test;
++
+        __le16  i_mode;         /* File mode */
+        __le16  i_uid;          /* Low 16 bits of Owner Uid */
+        __le32  i_size_lo;      /* Size in bytes */
+diff --git a/file.c b/file.c
+index 62db2fb..b42da65 100644
+--- a/file.c
++++ b/file.c
+@@ -101,7 +101,14 @@ ext42_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+        int overwrite = 0;
+        ssize_t ret;
+
+-       D("write to %s", file->f_path.dentry->d_name.name);
++        struct ext42_iloc iloc;
++        struct ext42_inode *raw_inode;
++        struct ext42_inode_info *ei = EXT4_I(inode);
++        iloc.bh = NULL;
++        ret = ext42_get_inode_loc(inode, &iloc);
++        raw_inode = ext42_raw_inode(&iloc);
++
++       D("write to %s", file->f_path.dentry->d_name.name, raw_inode->test);
+
+        /*
+         * Unaligned direct AIO must be serialized; see comment above
+diff --git a/namei.c b/namei.c
+index d663cb6..3a2273a 100644
+--- a/namei.c
++++ b/namei.c
+@@ -2465,6 +2465,15 @@ static int ext42_create(struct inode *dir, struct dentry *dentry, umode_t mode,
+ retry:
+        inode = ext42_new_inode_start_handle(dir, mode, &dentry->d_name, 0,
+                                            NULL, EXT4_HT_DIR, credits);
++
++        struct ext42_iloc iloc;
++        struct ext42_inode *raw_inode;
++        struct ext42_inode_info *ei = EXT4_I(inode);
++        iloc.bh = NULL;
++        ext42_get_inode_loc(inode, &iloc);
++        raw_inode = ext42_raw_inode(&iloc);
++       raw_inode->test = 5;
++
+        handle = ext42_journal_current_handle();
+        err = PTR_ERR(inode);
+        if (!IS_ERR(inode)) {

@@ -1,0 +1,8 @@
+#!/bin/bash
+# A simple script
+
+umount /mnt
+rmmod ext42
+insmod ext42.ko
+mount -t ext42 /dev/sdb /mnt
+chmod -R 777 /mnt
