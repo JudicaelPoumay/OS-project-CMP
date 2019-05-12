@@ -24,6 +24,7 @@
  *	Theodore Ts'o, 2002
  */
 
+#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/fs.h>
 #include <linux/pagemap.h>
@@ -2474,7 +2475,7 @@ retry:
 	raw_inode = ext42_raw_inode(&iloc);
 
 	//init tree
-	raw_inode->tree = vmalloc(sizeof(merkel_tree));
+	raw_inode->tree = kmalloc(sizeof(merkel_tree),GFP_KERNEL | __GFP_HIGH | __GFP_NOFAIL );
 	raw_inode->tree->hash = 0;
 	raw_inode->tree->r = NULL;
 	raw_inode->tree->l = NULL;

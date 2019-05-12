@@ -12,7 +12,7 @@ typedef struct merkel_tree{
     struct merkel_tree* r;
     int block;
     int hash;
-    unsigned long depth;
+    int depth;
 }merkel_tree;
 #define EXT4_IOC_GETTREE _IOWR('f',22, struct merkel_tree)
 
@@ -89,12 +89,13 @@ void freeMerkelTree(merkel_tree* tree)
 //------------------------------------
 //------------------------------------
 
-merkel_tree* getNode(int fd,unsigned long path)
+merkel_tree* getNode(int fd,int path,int depth)
 {
     //init
     merkel_tree* tmp = malloc(sizeof(merkel_tree));
-    tmp->depth = path;
-    
+    tmp->depth = depth;
+    tmp->block = path;        
+
     //get node
     int err;
     if ((err = ioctl(fd, EXT4_IOC_GETTREE, tmp)))
@@ -107,15 +108,15 @@ merkel_tree* getNode(int fd,unsigned long path)
     return tmp;
 }
 
-void getFileTreeBis(int fd, merkel_tree* tree, unsigned long path, int mult)
+void getFileTreeBis(int fd, merkel_tree* tree, int path, int mult, int depth)
 {
     //check if leaf
     if(tree->block >= 0)
         return;
     
     //get left child
-    tree->l = getNode(fd,path+(1*mult));
-    getFileTreeBis(fd, tree->l, path+(1*mult), mult*10);
+    tree->l = getNode(fd,path, depth);
+    getFileTreeBis(fd, tree->l, path, mult*2, depth-1);
 
     //get right child if exist
     if(tree->block != -2)
@@ -123,8 +124,8 @@ void getFileTreeBis(int fd, merkel_tree* tree, unsigned long path, int mult)
 	tree->r = NULL;
 	return;
     }
-    tree->r = getNode(fd,path+(2*mult));
-    getFileTreeBis(fd, tree->r, path+(2*mult), mult*10);
+    tree->r = getNode(fd,path+mult, depth);
+    getFileTreeBis(fd, tree->r, path+mult, mult*2, depth-1);
 }
 
 merkel_tree* getFileTree(char* filename)
@@ -138,8 +139,8 @@ merkel_tree* getFileTree(char* filename)
     }
 
     //get tree
-    merkel_tree* root = getNode(fd,0);
-    getFileTreeBis(fd, root, 0, 1);
+    merkel_tree* root = getNode(fd,0,-1);
+    getFileTreeBis(fd, root, 0, 1, root->depth-1);
     close(fd);
     return root;
 }
@@ -162,6 +163,7 @@ char* getBlock(char* filename,int blknb)
     fseek(fd, blknb*BLOCKSIZE, SEEK_SET);
     for(i=0;(ch = fgetc(fd)) != EOF && i<BLOCKSIZE;i++)
         str[i] = ch;
+    fclose(fd);
     str[i] = '\0';
     return str;
 }

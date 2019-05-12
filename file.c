@@ -17,6 +17,7 @@
  *  64-bit file support on 64-bit platforms by Jakub Jelinek
  *	(jj@sunsite.ms.mff.cuni.cz)
  */
+#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/time.h>
 #include <linux/fs.h>
@@ -139,7 +140,7 @@ void freeMerkelTree(merkel_tree* tree)
         freeMerkelTree(tree->l);        
     if(tree->block == -2)
         freeMerkelTree(tree->r);
-    vfree(tree);
+    kfree(tree);
 }
 
 int computeDepth(int nbLeaves)
@@ -176,7 +177,7 @@ merkel_tree* freeRight(merkel_tree* tree)
 {
     merkel_tree* subLeftTree = tree->l;
     freeMerkelTree(tree->r);
-    vfree(tree);
+    kfree(tree);
     
     return subLeftTree;
 }
@@ -206,7 +207,7 @@ void freeRightMostLeaf(merkel_tree* tree)
             else
             {
                 it->block = -1;  
-                vfree(it->r);
+                kfree(it->r);
                 it->r = NULL;
                 return;
             }
@@ -220,7 +221,7 @@ void freeRightMostLeaf(merkel_tree* tree)
             else
             {
                 it->block = 0;                
-                vfree(it->l);
+                kfree(it->l);
                 it->l = NULL;
                 freeRightMostLeaf(tree);
                 return;
@@ -236,71 +237,74 @@ void freeLeaves(merkel_tree* tree, int nbToFree)
         freeRightMostLeaf(tree);
 }
 
-unsigned long getNextPath(unsigned long path, int depth)
+int getNextPath(int path, int depth)
 {
-    unsigned long i,mult;
-    if(path == 0)
-    {
-        for(i = 0,mult = 1;i < depth;i++)
-        {
-            path += (1*mult);
-            mult *= 10;
-        }
-        return path;
-    }
-     
-    mult = 1;
+    if(depth == 0)       
+        return -1;           
+    if(path == -1)
+	return 0;
+
+    int i,mult = 1;
     for(i = 0,mult = 1;i < depth-1;i++)
-        mult *= 10;
+        mult *= 2;
     while(1)
-    {
-        path += (1*mult);
-        if((path/mult)%10 < 3)
-            return path;
+    {        
+        if((path/mult)%2)
+            path -= mult;
         else
-            path -= (2*mult);
-        mult/=10;    
-    }        
+	{
+            path+= mult;
+	    return path;
+	}
+        mult/=2;    
+    }  
+    return path;
 }
 
-void setNewHasheLeaf(merkel_tree* tree, unsigned long path, int hash, int blknb)
+void setNewHasheLeaf(merkel_tree* tree, int path, int hash, int blknb)
 {
     //extract node from path + update + alloc if needed
-    while(path)
-    {			
-        int dir = path%10;
-        path /= 10;
-        if(dir == 1)
-        {
-            if(!tree->l)
+    if(path >= 0)
+    {
+        while(tree->depth != 0)
+        {	
+            int dir = path%2;
+            path /= 2;
+            if(dir == 0)
             {
-                tree->l = vmalloc(sizeof(merkel_tree));
-                tree->l->l = NULL;
-                tree->l->r = NULL;
-                tree->l->depth = tree->depth-1;
-                tree->block = -1;
+                if(!tree->l)
+                {		
+                    tree->l = kmalloc(sizeof(merkel_tree),GFP_KERNEL | __GFP_HIGH | __GFP_NOFAIL);
+                    tree->l->l = NULL;
+                    tree->l->r = NULL;
+                    tree->l->depth = tree->depth-1;
+                    tree->block = -1;
+                }
+                tree = tree->l;
             }
-            tree = tree->l;
-        }
-        else if(dir == 2)
-        {
-            if(!tree->r)
+            else if(dir == 1)
             {
-                tree->r = vmalloc(sizeof(merkel_tree));  
-                tree->r->l = NULL;
-                tree->r->r = NULL;
-                tree->r->depth = tree->depth-1;              
-                tree->block = -2;
+                if(!tree->r)
+                {
+                    tree->r = kmalloc(sizeof(merkel_tree),GFP_KERNEL | __GFP_HIGH | __GFP_NOFAIL );  
+                    tree->r->l = NULL;
+                    tree->r->r = NULL;
+                    tree->r->depth = tree->depth-1;              
+                    tree->block = -2;
+                }
+                tree = tree->r;
             }
-            tree = tree->r;
+            else
+                break;			
         }
-        else
-            break;			
     }
-    
-    //set hash
+
+    //set leaf
+    tree->r = NULL;
+    tree->l = NULL;
+    tree->depth = 0;
     tree->block = blknb;
-    tree->hash = hash;
+    tree->hash  = hash;
 }
 
 void setNewHasheParents(merkel_tree* tree)
@@ -322,7 +326,7 @@ void setNewHasheParents(merkel_tree* tree)
 
 void setNewHashes(merkel_tree* tree, int* hashes, int size, int depth)
 {
-    unsigned long i, path = 0;
+    int i, path = -1;
     for(i = 0;i< size;i++)
     {
         path = getNextPath(path, depth);

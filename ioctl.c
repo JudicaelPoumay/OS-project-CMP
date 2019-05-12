@@ -231,11 +231,11 @@ long ext42_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
                 }	
 	
 		//extract node from path
-		while(path.depth)
+		while(node.depth != path.depth && path.depth != -1)
         	{			
-                	int dir = path.depth%10;
-	                path.depth /= 10;
-        	        if(dir == 1)
+                	int dir = path.block%2;
+	                path.block /= 2;
+        	        if(dir == 0)
 			{
 				if(!node.l)
         	                {
@@ -245,7 +245,7 @@ long ext42_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	                        node = *(node.l);
 			}
-        	        else if(dir == 2)
+        	        else if(dir == 1)
 			{
 				if(!node.r)
                 	        {

@@ -645,7 +645,7 @@ typedef struct merkel_tree{
 	struct merkel_tree* r;
 	int block;
 	int hash;
-	unsigned long depth;
+	int depth;
 }merkel_tree;
 #define EXT4_IOC_GETTREE                _IOWR('f',22, struct merkel_tree)
 
